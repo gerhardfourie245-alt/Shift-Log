@@ -5,69 +5,148 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Shift & Fuel Log (GBT 10)</title>
     <style>
+        :root {
+            --bg-color: #121212;
+            --card-bg: #1e1e1e;
+            --text-color: #e0e0e0;
+            --subtext-color: #b0b0b0;
+            --accent-color: #ffb74d;
+            --input-bg: #2d2d2d;
+            --input-border: #444444;
+            --entry-bg: #2a2a2a;
+            --border-highlight: #ffb74d;
+            --btn-text: #121212;
+            --success-color: #81c784;
+            --warning-color: #ff8a65;
+        }
+
+        body.sunlight-mode {
+            --bg-color: #ffffff;
+            --card-bg: #f5f5f5;
+            --text-color: #000000;
+            --subtext-color: #222222;
+            --accent-color: #d84315;
+            --input-bg: #ffffff;
+            --input-border: #000000;
+            --entry-bg: #e0e0e0;
+            --border-highlight: #d84315;
+            --btn-text: #ffffff;
+            --success-color: #1b5e20;
+            --warning-color: #b71c1c;
+        }
+
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #121212;
-            color: #e0e0e0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
             margin: 0;
             padding: 16px;
+            transition: background-color 0.2s, color 0.2s;
         }
-        h2, h3 {
-            color: #ffb74d;
+
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 12px;
+        }
+
+        h2 {
+            color: var(--accent-color);
+            margin: 0;
+            font-size: 22px;
+        }
+
+        h3 {
+            color: var(--accent-color);
+            margin-top: 0;
             margin-bottom: 8px;
         }
+
+        .theme-toggle-btn {
+            background: var(--accent-color);
+            color: var(--btn-text);
+            border: 2px solid #000;
+            padding: 8px 12px;
+            font-weight: bold;
+            font-size: 14px;
+            border-radius: 6px;
+            cursor: pointer;
+            width: auto;
+            margin: 0;
+        }
+
         .card {
-            background: #1e1e1e;
+            background: var(--card-bg);
             padding: 16px;
             border-radius: 8px;
             margin-bottom: 16px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border: 1px solid var(--input-border);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
         }
+
         label {
             display: block;
             margin-top: 10px;
             font-size: 14px;
-            color: #b0b0b0;
+            font-weight: bold;
+            color: var(--subtext-color);
         }
+
         input {
             width: 100%;
-            padding: 10px;
+            padding: 12px;
             margin-top: 4px;
-            background: #2d2d2d;
-            border: 1px solid #444;
-            color: #fff;
-            border-radius: 4px;
-            font-size: 16px;
+            background: var(--input-bg);
+            border: 2px solid var(--input-border);
+            color: var(--text-color);
+            border-radius: 6px;
+            font-size: 18px;
+            font-weight: bold;
             box-sizing: border-box;
         }
-        button {
-            background: #ffb74d;
-            color: #121212;
+
+        button.action-btn {
+            background: var(--accent-color);
+            color: var(--btn-text);
             border: none;
-            padding: 14px;
+            padding: 16px;
             width: 100%;
-            font-size: 16px;
+            font-size: 18px;
             font-weight: bold;
-            border-radius: 4px;
+            border-radius: 6px;
             cursor: pointer;
             margin-top: 16px;
         }
-        button:active {
-            background: #f57c00;
+
+        button.action-btn:active {
+            opacity: 0.8;
         }
+
         .log-entry {
-            background: #2a2a2a;
-            padding: 10px;
-            border-radius: 4px;
-            margin-top: 8px;
-            font-size: 13px;
-            border-left: 4px solid #ffb74d;
+            background: var(--entry-bg);
+            padding: 12px;
+            border-radius: 6px;
+            margin-top: 10px;
+            font-size: 14px;
+            border-left: 6px solid var(--border-highlight);
+            color: var(--text-color);
+        }
+
+        .metric-highlight {
+            font-weight: bold;
+            font-size: 15px;
+            display: block;
+            margin-top: 6px;
         }
     </style>
 </head>
 <body>
 
-    <h2>Shift & Fuel Log</h2>
+    <div class="header-row">
+        <h2>Shift & Fuel Log</h2>
+        <button class="theme-toggle-btn" onclick="toggleTheme()" id="themeBtn">☀️ Sunlight Mode</button>
+    </div>
     
     <div class="card">
         <h3>Vehicle Details</h3>
@@ -98,7 +177,7 @@
         <label>Pump Rand Value (Total cost)</label>
         <input type="number" step="0.01" id="pumpValue" placeholder="e.g. 5750.00">
 
-        <button onclick="saveFillUp()">Save Fill-Up & Calculate</button>
+        <button class="action-btn" onclick="saveFillUp()">Save Fill-Up & Calculate</button>
     </div>
 
     <div class="card">
@@ -108,6 +187,21 @@
 
 <script>
     let logs = JSON.parse(localStorage.getItem('gbt10_logs') || '[]');
+
+    function initTheme() {
+        const savedTheme = localStorage.getItem('gbt10_theme');
+        if (savedTheme === 'sunlight') {
+            document.body.classList.add('sunlight-mode');
+            document.getElementById('themeBtn').innerText = '🌙 Night Mode';
+        }
+    }
+
+    function toggleTheme() {
+        document.body.classList.toggle('sunlight-mode');
+        const isSunlight = document.body.classList.contains('sunlight-mode');
+        localStorage.setItem('gbt10_theme', isSunlight ? 'sunlight' : 'night');
+        document.getElementById('themeBtn').innerText = isSunlight ? '🌙 Night Mode' : '☀️ Sunlight Mode';
+    }
 
     function renderHistory() {
         const listDiv = document.getElementById('historyList');
@@ -121,16 +215,21 @@
             let curr = logs[i];
             html += `<div class="log-entry">
                 <strong>Odo:</strong> ${curr.odometer} km | <strong>Liters:</strong> ${curr.liters} L<br>
-                <strong>Engine Hrs:</strong> ${curr.engineHrs} | <strong>Crane Hrs:</strong> ${curr.craneHrs}<br>`;
+                <strong>Engine Hrs:</strong> ${curr.engineHours} | <strong>Crane Hrs:</strong> ${curr.craneHours}<br>`;
             
             if (i > 0) {
                 let prev = logs[i - 1];
                 let dist = curr.odometer - prev.odometer;
                 let kmPerLtr = (dist / curr.liters).toFixed(2);
-                let costPerKm = (curr.pumpValue / dist).toFixed(2);
-                html += `<span style="color: #81c784;"><strong>Distance:</strong> ${dist} km | <strong>KM/L:</strong> ${kmPerLtr} | <strong>Cost/KM:</strong> R${costPerKm}</span>`;
+                let costPerKm = curr.pumpValue && dist > 0 ? (curr.pumpValue / dist).toFixed(2) : 'N/A';
+                
+                html += `<span class="metric-highlight" style="color: var(--success-color);">
+                    Distance: ${dist} km | KM/L: ${kmPerLtr} | Cost/KM: R${costPerKm}
+                </span>`;
             } else {
-                html += `<span style="color: #ff8a65;">Baseline entry recorded (Waiting for 2nd fill-up for efficiency)</span>`;
+                html += `<span class="metric-highlight" style="color: var(--warning-color);">
+                    Baseline entry recorded (Waiting for 2nd fill-up)
+                </span>`;
             }
             html += `</div>`;
         }
@@ -145,7 +244,7 @@
         let pumpValue = parseFloat(document.getElementById('pumpValue').value);
 
         if (isNaN(odometer) || isNaN(liters)) {
-            alert("Please at least fill in the Odometer and Liters filled!");
+            alert("Please fill in at least the Odometer and Liters filled!");
             return;
         }
 
@@ -171,9 +270,9 @@
         alert("Fill-up saved successfully!");
     }
 
+    initTheme();
     renderHistory();
 </script>
 
 </body>
-  </html>
-  
+</html>
