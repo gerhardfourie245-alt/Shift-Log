@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Shift & Fuel Log (GBT 10)</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #121212;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 16px;
+        }
+        h2, h3 {
+            color: #ffb74d;
+            margin-bottom: 8px;
+        }
+        .card {
+            background: #1e1e1e;
+            padding: 16px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        }
+        label {
+            display: block;
+            margin-top: 10px;
+            font-size: 14px;
+            color: #b0b0b0;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            margin-top: 4px;
+            background: #2d2d2d;
+            border: 1px solid #444;
+            color: #fff;
+            border-radius: 4px;
+            font-size: 16px;
+            box-sizing: border-box;
+        }
+        button {
+            background: #ffb74d;
+            color: #121212;
+            border: none;
+            padding: 14px;
+            width: 100%;
+            font-size: 16px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 16px;
+        }
+        button:active {
+            background: #f57c00;
+        }
+        .log-entry {
+            background: #2a2a2a;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 8px;
+            font-size: 13px;
+            border-left: 4px solid #ffb74d;
+        }
+    </style>
+</head>
+<body>
+
+    <h2>Shift & Fuel Log</h2>
+    
+    <div class="card">
+        <h3>Vehicle Details</h3>
+        <label>Registration Number</label>
+        <input type="text" id="regNumber" value="CEM 1705">
+        
+        <label>Fleet Number</label>
+        <input type="text" id="fleetNumber" value="GBT 10">
+
+        <label>Driver Name</label>
+        <input type="text" id="driverName" value="Gerhard">
+    </div>
+
+    <div class="card">
+        <h3>Current Readings</h3>
+        <label>Odometer (km)</label>
+        <input type="number" id="odometer" placeholder="e.g. 145200">
+
+        <label>Engine Hours</label>
+        <input type="number" step="0.1" id="engineHours" placeholder="e.g. 1250.5">
+
+        <label>Crane Hours</label>
+        <input type="number" step="0.1" id="craneHours" placeholder="e.g. 120.0">
+
+        <label>Liters Filled</label>
+        <input type="number" step="0.1" id="litersFilled" placeholder="e.g. 250">
+
+        <label>Pump Rand Value (Total cost)</label>
+        <input type="number" step="0.01" id="pumpValue" placeholder="e.g. 5750.00">
+
+        <button onclick="saveFillUp()">Save Fill-Up & Calculate</button>
+    </div>
+
+    <div class="card">
+        <h3>Recent History & Performance</h3>
+        <div id="historyList">No logs saved yet.</div>
+    </div>
+
+<script>
+    let logs = JSON.parse(localStorage.getItem('gbt10_logs') || '[]');
+
+    function renderHistory() {
+        const listDiv = document.getElementById('historyList');
+        if (logs.length === 0) {
+            listDiv.innerHTML = "No logs saved yet.";
+            return;
+        }
+
+        let html = '';
+        for (let i = logs.length - 1; i >= 0; i--) {
+            let curr = logs[i];
+            html += `<div class="log-entry">
+                <strong>Odo:</strong> ${curr.odometer} km | <strong>Liters:</strong> ${curr.liters} L<br>
+                <strong>Engine Hrs:</strong> ${curr.engineHrs} | <strong>Crane Hrs:</strong> ${curr.craneHrs}<br>`;
+            
+            if (i > 0) {
+                let prev = logs[i - 1];
+                let dist = curr.odometer - prev.odometer;
+                let kmPerLtr = (dist / curr.liters).toFixed(2);
+                let costPerKm = (curr.pumpValue / dist).toFixed(2);
+                html += `<span style="color: #81c784;"><strong>Distance:</strong> ${dist} km | <strong>KM/L:</strong> ${kmPerLtr} | <strong>Cost/KM:</strong> R${costPerKm}</span>`;
+            } else {
+                html += `<span style="color: #ff8a65;">Baseline entry recorded (Waiting for 2nd fill-up for efficiency)</span>`;
+            }
+            html += `</div>`;
+        }
+        listDiv.innerHTML = html;
+    }
+
+    function saveFillUp() {
+        let odometer = parseFloat(document.getElementById('odometer').value);
+        let engineHours = parseFloat(document.getElementById('engineHours').value);
+        let craneHours = parseFloat(document.getElementById('craneHours').value);
+        let liters = parseFloat(document.getElementById('litersFilled').value);
+        let pumpValue = parseFloat(document.getElementById('pumpValue').value);
+
+        if (isNaN(odometer) || isNaN(liters)) {
+            alert("Please at least fill in the Odometer and Liters filled!");
+            return;
+        }
+
+        let entry = {
+            date: new Date().toLocaleDateString(),
+            odometer: odometer,
+            engineHours: isNaN(engineHours) ? 0 : engineHours,
+            craneHours: isNaN(craneHours) ? 0 : craneHours,
+            liters: liters,
+            pumpValue: isNaN(pumpValue) ? 0 : pumpValue
+        };
+
+        logs.push(entry);
+        localStorage.setItem('gbt10_logs', JSON.stringify(logs));
+
+        document.getElementById('odometer').value = '';
+        document.getElementById('engineHours').value = '';
+        document.getElementById('craneHours').value = '';
+        document.getElementById('litersFilled').value = '';
+        document.getElementById('pumpValue').value = '';
+
+        renderHistory();
+        alert("Fill-up saved successfully!");
+    }
+
+    renderHistory();
+</script>
+
+</body>
+  </html>
+  
