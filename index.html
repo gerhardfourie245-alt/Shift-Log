@@ -92,6 +92,10 @@
         .est-row:first-of-type { border-top: 0; }
         .note { color: var(--subtext-color); font-size: 13px; margin-top: 8px; }
         .qrow { display: flex; gap: 6px; margin-top: 6px; }
+        .qgrid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; margin-top: 6px; }
+        .qgrid button { padding: 12px 0; font-size: 15px; font-weight: bold; border-radius: 6px; cursor: pointer;
+                        background: var(--input-bg); color: var(--text-color); border: 2px solid var(--input-border); }
+        .qlabel { font-size: 13px; color: var(--subtext-color); margin-top: 8px; }
         .qrow button { flex: 1; padding: 10px 4px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer;
                        background: var(--input-bg); color: var(--text-color); border: 2px solid var(--input-border); }
         details summary { cursor: pointer; font-weight: bold; color: var(--subtext-color); margin-top: 12px; }
@@ -134,20 +138,20 @@
         <input type="number" inputmode="numeric" id="truckP" value="0">
         <div class="qrow">
             <button onclick="setP('truckP',0)">Empty</button>
-            <button onclick="adjP('truckP',-2)">−2</button>
-            <button onclick="adjP('truckP',-4)">−4</button>
             <button onclick="setP('truckP','full')">Full</button>
         </div>
+        <div class="qlabel">Offloaded: tap how many came off</div>
+        <div class="qgrid" id="qgTruck"></div>
 
         <div id="trailerBlock">
             <label>Pallets on trailer</label>
             <input type="number" inputmode="numeric" id="trailerP" value="0">
             <div class="qrow">
                 <button onclick="setP('trailerP',0)">Empty</button>
-                <button onclick="adjP('trailerP',-2)">−2</button>
-                <button onclick="adjP('trailerP',-4)">−4</button>
                 <button onclick="setP('trailerP','full')">Full</button>
             </div>
+            <div class="qlabel">Offloaded: tap how many came off</div>
+            <div class="qgrid" id="qgTrailer"></div>
         </div>
 
         <label>Odometer now (km)</label>
@@ -250,6 +254,14 @@
         const c = caps();
         const cap = id === 'truckP' ? c.truck : c.trailer;
         document.getElementById(id).value = v === 'full' ? cap : v;
+    }
+    function buildQuick() {
+        const c = caps();
+        [['qgTruck', 'truckP', c.truck], ['qgTrailer', 'trailerP', c.trailer]].forEach(q => {
+            let h = '';
+            for (let n = 1; n <= q[2]; n++) h += `<button onclick="adjP('${q[1]}',-${n})">−${n}</button>`;
+            document.getElementById(q[0]).innerHTML = h;
+        });
     }
     function adjP(id, d) {
         const c = caps();
@@ -411,6 +423,7 @@
     }
 
     function saveVehicle() {
+        buildQuick();
         try {
             localStorage.setItem('gbt10_vehicle', JSON.stringify({
                 reg: document.getElementById('regNumber').value,
@@ -667,6 +680,7 @@
         document.getElementById('truckP').value = c.truckP;
         document.getElementById('trailerP').value = c.trailerP;
     }
+    buildQuick();
     paintToggles();
     renderStatus();
     initTheme();
