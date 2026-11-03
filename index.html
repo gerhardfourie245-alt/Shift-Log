@@ -82,6 +82,16 @@
         .since { color: var(--subtext-color); font-size: 13px; display: block; margin-top: 4px; }
         .entry-actions { margin-top: 10px; }
         .hist-top { display: flex; justify-content: space-between; margin-bottom: 4px; }
+        .toggle-row { display: flex; gap: 8px; margin-top: 8px; }
+        .tog { flex: 1; padding: 14px 6px; font-size: 16px; font-weight: bold; border-radius: 6px; cursor: pointer;
+               background: var(--input-bg); color: var(--text-color); border: 2px solid var(--input-border); }
+        .tog.on { background: var(--accent-color); color: var(--btn-text); border-color: var(--accent-color); }
+        .now { font-weight: bold; color: var(--success-color); margin-bottom: 6px; }
+        .mix { color: var(--subtext-color); font-size: 13px; display: block; margin-top: 4px; }
+        .est-row { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid var(--input-border); }
+        .est-row:first-of-type { border-top: 0; }
+        .note { color: var(--subtext-color); font-size: 13px; margin-top: 8px; }
+        details summary { cursor: pointer; font-weight: bold; color: var(--subtext-color); margin-top: 12px; }
     </style>
 </head>
 <body>
@@ -101,6 +111,27 @@
 
         <label>Driver Name</label>
         <input type="text" id="driverName" value="Gerhard" oninput="saveVehicle()">
+    </div>
+
+    <div class="card">
+        <h3>Load & Trailer</h3>
+        <div class="now" id="nowStatus"></div>
+        <div class="toggle-row">
+            <button class="tog" id="tgSolo" onclick="setSel('trailer', false)">No trailer</button>
+            <button class="tog" id="tgTrailer" onclick="setSel('trailer', true)">Trailer on</button>
+        </div>
+        <div class="toggle-row">
+            <button class="tog" id="tgEmpty" onclick="setSel('loaded', false)">Empty</button>
+            <button class="tog" id="tgLoaded" onclick="setSel('loaded', true)">Loaded</button>
+        </div>
+        <label>Odometer now (km)</label>
+        <input type="number" inputmode="decimal" step="any" id="evOdo" placeholder="e.g. 145230">
+        <div class="error-msg" id="evError" role="alert"></div>
+        <button class="action-btn" style="margin-top:8px;" onclick="logStatus()">Log status change</button>
+        <details>
+            <summary>Status history</summary>
+            <div id="evList"></div>
+        </details>
     </div>
 
     <div class="card">
@@ -131,6 +162,7 @@
     <div class="card">
         <h3>Recent History & Performance</h3>
         <div id="totals"></div>
+        <div id="estimates"></div>
         <div id="historyList">No logs saved yet.</div>
         <div class="entry-actions" style="margin-top:16px;">
             <button class="small-btn" onclick="copyCSV()">Copy as CSV</button>
@@ -140,7 +172,135 @@
 
 <script>
     let logs = [];
+    let events = [];
     let editIndex = null;
+    let selTrailer = false, selLoaded = false;
+    const COND = { SE: 'Solo empty', SL: 'Solo loaded', TE: 'Trailer empty', TL: 'Trailer loaded' };
+
+    function loadEvents() {
+        try {
+            const raw = localStorage.getItem('gbt10_status');
+            events = raw ? JSON.parse(raw) : [];
+            if (!Array.isArray(events)) events = [];
+        } catch (e) { events = []; }
+        events.sort((a, b) => a.odo - b.odo);
+    }
+    function persistEvents() {
+        try { localStorage.setItem('gbt10_status', JSON.stringify(events)); }
+        catch (e) { setInfo("Could not save on this device."); }
+    }
+    function statusText(s) {
+        return (s.trailer ? 'Trailer on' : 'No trailer') + ' · ' + (s.loaded ? 'Loaded' : 'Empty');
+    }
+    function setSel(kind, val) {
+        if (kind === 'trailer') selTrailer = val; else selLoaded = val;
+        paintToggles();
+    }
+    function paintToggles() {
+        document.getElementById('tgSolo').classList.toggle('on', !selTrailer);
+        document.getElementById('tgTrailer').classList.toggle('on', selTrailer);
+        document.getElementById('tgEmpty').classList.toggle('on', !selLoaded);
+        document.getElementById('tgLoaded').classList.toggle('on', selLoaded);
+    }
+    function renderStatus() {
+        const now = document.getElementById('nowStatus');
+        if (events.length) {
+            const c = events[events.length - 1];
+            now.innerText = 'Now: ' + statusText(c) + ' (since ' + c.odo + ' km)';
+        } else {
+            now.innerText = 'No status logged yet. Set it below to start tracking.';
+        }
+        const list = document.getElementById('evList');
+        if (!events.length) { list.innerHTML = '<div class="note">Nothing logged.</div>'; return; }
+        let h = '';
+        for (let i = events.length - 1; i >= 0; i--) {
+            const e = events[i];
+            h += `<div class="est-row"><span>${esc(e.odo)} km · ${statusText(e)}</span><button class="small-btn" style="margin:0" onclick="deleteEvent(${i})">Delete</button></div>`;
+        }
+        list.innerHTML = h;
+    }
+    function logStatus() {
+        const err = document.getElementById('evError');
+        const odo = parseFloat(document.getElementById('evOdo').value);
+        if (isNaN(odo)) { err.innerText = "Enter the odometer reading."; return; }
+        const last = events.length ? events[events.length - 1] : null;
+        if (last && odo < last.odo) { err.innerText = "Odometer is lower than the last status change (" + last.odo + " km)."; return; }
+        if (last && last.trailer === selTrailer && last.loaded === selLoaded) { err.innerText = "That is already the current status."; return; }
+        err.innerText = '';
+        events.push({ odo: odo, trailer: selTrailer, loaded: selLoaded, date: todayISO() });
+        persistEvents();
+        document.getElementById('evOdo').value = '';
+        renderStatus();
+        renderHistory();
+        setInfo("Status logged.");
+    }
+    function deleteEvent(i) {
+        if (!confirm("Delete this status change?")) return;
+        events.splice(i, 1);
+        persistEvents();
+        renderStatus();
+        renderHistory();
+    }
+
+    // km between two odometer readings, split by condition
+    function kmBreakdown(P, X) {
+        const out = { SE: 0, SL: 0, TE: 0, TL: 0, U: 0 };
+        let cur = null, pos = P;
+        events.forEach(e => { if (e.odo <= P) cur = e; });
+        function add(s, k) {
+            if (k <= 0) return;
+            if (!s) out.U += k; else out[(s.trailer ? 'T' : 'S') + (s.loaded ? 'L' : 'E')] += k;
+        }
+        events.filter(e => e.odo > P && e.odo < X).forEach(e => { add(cur, e.odo - pos); pos = e.odo; cur = e; });
+        add(cur, X - pos);
+        return out;
+    }
+
+    // Least squares with no negative coefficients: liters = sum(rate * amount)
+    function solve(A, b) {
+        const n = b.length;
+        for (let i = 0; i < n; i++) {
+            let p = i;
+            for (let r = i + 1; r < n; r++) if (Math.abs(A[r][i]) > Math.abs(A[p][i])) p = r;
+            if (Math.abs(A[p][i]) < 1e-12) return null;
+            [A[i], A[p]] = [A[p], A[i]]; [b[i], b[p]] = [b[p], b[i]];
+            for (let r = i + 1; r < n; r++) {
+                const m = A[r][i] / A[i][i];
+                for (let c = i; c < n; c++) A[r][c] -= m * A[i][c];
+                b[r] -= m * b[i];
+            }
+        }
+        const x = new Array(n).fill(0);
+        for (let i = n - 1; i >= 0; i--) {
+            let s = b[i];
+            for (let c = i + 1; c < n; c++) s -= A[i][c] * x[c];
+            x[i] = s / A[i][i];
+        }
+        return x;
+    }
+    function fitRates(rows, cols) {
+        let active = cols.slice();
+        while (active.length) {
+            const n = active.length;
+            const A = Array.from({ length: n }, () => new Array(n).fill(0));
+            const b = new Array(n).fill(0);
+            rows.forEach(r => {
+                active.forEach((ci, i) => {
+                    b[i] += r.x[ci] * r.y;
+                    active.forEach((cj, j) => { A[i][j] += r.x[ci] * r.x[cj]; });
+                });
+            });
+            let tr = 0; for (let i = 0; i < n; i++) tr += A[i][i];
+            for (let i = 0; i < n; i++) A[i][i] += 1e-6 * tr / n;
+            const sol = solve(A, b);
+            if (!sol) return null;
+            let worst = -1, wv = 0;
+            sol.forEach((v, i) => { if (v < wv) { wv = v; worst = i; } });
+            if (worst === -1) { const res = {}; active.forEach((ci, i) => res[ci] = sol[i]); return res; }
+            active.splice(worst, 1);
+        }
+        return null;
+    }
 
     function loadLogs() {
         try {
@@ -236,6 +396,10 @@
                 const lPerCrane = dCrane > 0 ? curr.liters / dCrane : null;
                 const costPerKm = curr.pumpValue && dist > 0 ? curr.pumpValue / dist : null;
                 const perLitre = curr.pumpValue && curr.liters > 0 ? curr.pumpValue / curr.liters : null;
+                const mix = kmBreakdown(prev.odometer, curr.odometer);
+                const parts = [];
+                ['SE','SL','TE','TL'].forEach(k => { if (mix[k] > 0) parts.push(COND[k] + ' ' + f(mix[k],0) + ' km'); });
+                if (mix.U > 0 && parts.length) parts.push('Untracked ' + f(mix.U,0) + ' km');
 
                 totL += curr.liters; totKm += Math.max(dist, 0);
                 totEh += Math.max(dEng, 0); totCh += Math.max(dCrane, 0); totR += curr.pumpValue || 0;
@@ -246,7 +410,8 @@
                 <span class="metric-highlight" style="color: var(--success-color);">
                     L/Engine h: ${f(lPerEng,1)} | L/Crane h: ${f(lPerCrane,1)}${perLitre === null ? '' : ' | R' + f(perLitre,2) + '/L'}
                 </span>
-                <span class="since">Since last fill: ${f(dist,0)} km, ${f(dEng,1)} engine h, ${f(dCrane,1)} crane h</span>`;
+                <span class="since">Since last fill: ${f(dist,0)} km, ${f(dEng,1)} engine h, ${f(dCrane,1)} crane h</span>
+                ${parts.length ? '<span class="mix">' + parts.join(' · ') + '</span>' : ''}`;
             } else {
                 html += `<span class="metric-highlight" style="color: var(--warning-color);">
                     Baseline entry (liters not counted, waiting for next fill-up)
@@ -259,6 +424,7 @@
         }
         listDiv.innerHTML = html;
 
+        renderEstimates();
         if (logs.length > 1) {
             totalsDiv.innerHTML = `<div class="log-entry" style="border-left-color: var(--success-color);">
                 <strong>Overall average (${logs.length - 1} fill-up${logs.length > 2 ? 's' : ''})</strong>
@@ -271,6 +437,44 @@
         } else {
             totalsDiv.innerHTML = "";
         }
+    }
+
+    function renderEstimates() {
+        const box = document.getElementById('estimates');
+        const rows = [];
+        let totR = 0, totL = 0;
+        for (let i = 1; i < logs.length; i++) {
+            const c = logs[i], p = logs[i - 1];
+            const dist = c.odometer - p.odometer;
+            if (dist <= 0) continue;
+            if (c.pumpValue > 0) { totR += c.pumpValue; totL += c.liters; }
+            const m = kmBreakdown(p.odometer, c.odometer);
+            if (m.U / dist > 0.1) continue;
+            rows.push({ x: { SE: m.SE, SL: m.SL, TE: m.TE, TL: m.TL, CR: Math.max(c.craneHours - p.craneHours, 0) }, y: c.liters, dist: dist });
+        }
+        if (!events.length) { box.innerHTML = '<div class="note">Log your load and trailer status above to get a cost breakdown per condition.</div>'; return; }
+        const cols = ['SE','SL','TE','TL','CR'].filter(k => rows.some(r => r.x[k] > 0));
+        const enough = {};
+        ['SE','SL','TE','TL','CR'].forEach(k => { enough[k] = rows.filter(r => r.x[k] > (k === 'CR' ? 0 : 0.05 * r.dist)).length >= 2; });
+        if (rows.length < cols.length + 1 || rows.length < 3) {
+            box.innerHTML = `<div class="note">Cost breakdown needs about 4+ fill-ups with tracked status (have ${rows.length}). Keep logging.</div>`;
+            return;
+        }
+        const rates = fitRates(rows, cols);
+        if (!rates) { box.innerHTML = '<div class="note">Not enough variety yet to separate the conditions.</div>'; return; }
+        const rl = totL > 0 ? totR / totL : null;
+        let h = '<div class="log-entry" style="border-left-color: var(--success-color);"><strong>Estimated running cost by condition</strong>';
+        ['SE','SL','TE','TL'].forEach(k => {
+            const r = rates[k];
+            let right = 'not enough data yet';
+            if (r > 0 && enough[k]) right = f(1 / r, 2) + ' km/L' + (rl ? ' · R' + f(r * rl, 2) + '/km' : '');
+            h += `<div class="est-row"><span>${COND[k]}</span><span>${right}</span></div>`;
+        });
+        if (rates.CR !== undefined && enough.CR) {
+            h += `<div class="est-row"><span>Crane working</span><span>${f(rates.CR,1)} L/h${rl ? ' · R' + f(rates.CR * rl, 0) + '/h' : ''}</span></div>`;
+        }
+        h += `<div class="note">Estimated from ${rows.length} fill-ups. Rough until you have 8–10 with different mixes. Fuel only, excludes tyres, servicing, wages and licences.</div></div>`;
+        box.innerHTML = h;
     }
 
     function clearForm() {
@@ -350,9 +554,11 @@
     }
 
     function copyCSV() {
-        const rows = ["date,odometer_km,engine_hours,crane_hours,liters,rand_total"]
+        let rows = ["date,odometer_km,engine_hours,crane_hours,liters,rand_total"]
             .concat(logs.map(e => [e.date, e.odometer, e.engineHours, e.craneHours, e.liters, e.pumpValue].join(",")))
             .join("\n");
+        const evRows = events.length ? "\n\nodometer_km,trailer,loaded\n" + events.map(e => [e.odo, e.trailer ? 'yes' : 'no', e.loaded ? 'yes' : 'no'].join(",")).join("\n") : "";
+        rows += evRows;
         try {
             navigator.clipboard.writeText(rows).then(
                 () => setInfo("Copied. Paste into Notes or a spreadsheet."),
@@ -361,6 +567,10 @@
     }
 
     loadLogs();
+    loadEvents();
+    if (events.length) { const c = events[events.length - 1]; selTrailer = c.trailer; selLoaded = c.loaded; }
+    paintToggles();
+    renderStatus();
     loadVehicle();
     initTheme();
     document.getElementById('entryDate').value = todayISO();
