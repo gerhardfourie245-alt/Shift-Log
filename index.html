@@ -27,3 +27,345 @@
             --accent-color: #d84315;
             --input-bg: #ffffff;
             --input-border: #000000;
+            --entry-bg: #e0e0e0;
+            --border-highlight: #d84315;
+            --btn-text: #ffffff;
+            --success-color: #1b5e20;
+            --warning-color: #b71c1c;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 16px;
+            transition: background-color 0.2s, color 0.2s;
+        }
+        .header-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        h2 { color: var(--accent-color); margin: 0; font-size: 22px; }
+        h3 { color: var(--accent-color); margin-top: 0; margin-bottom: 8px; }
+        .theme-toggle-btn {
+            background: var(--accent-color); color: var(--btn-text);
+            border: 2px solid #000; padding: 8px 12px; font-weight: bold;
+            font-size: 14px; border-radius: 6px; cursor: pointer; width: auto; margin: 0;
+        }
+        .card {
+            background: var(--card-bg); padding: 16px; border-radius: 8px;
+            margin-bottom: 16px; border: 1px solid var(--input-border);
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+        }
+        label { display: block; margin-top: 10px; font-size: 14px; font-weight: bold; color: var(--subtext-color); }
+        input {
+            width: 100%; padding: 12px; margin-top: 4px;
+            background: var(--input-bg); border: 2px solid var(--input-border);
+            color: var(--text-color); border-radius: 6px; font-size: 18px;
+            font-weight: bold; box-sizing: border-box;
+        }
+        button.action-btn {
+            background: var(--accent-color); color: var(--btn-text); border: none;
+            padding: 16px; width: 100%; font-size: 18px; font-weight: bold;
+            border-radius: 6px; cursor: pointer; margin-top: 16px;
+        }
+        button.action-btn:active { opacity: 0.8; }
+        button.small-btn {
+            background: transparent; color: var(--text-color);
+            border: 2px solid var(--input-border); padding: 8px 12px;
+            font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer; margin-right: 8px;
+        }
+        .error-msg { color: var(--warning-color); font-weight: bold; margin-top: 10px; min-height: 1em; }
+        .info-msg { color: var(--success-color); font-weight: bold; margin-top: 10px; }
+        .log-entry {
+            background: var(--entry-bg); padding: 12px; border-radius: 6px; margin-top: 10px;
+            font-size: 14px; border-left: 6px solid var(--border-highlight); color: var(--text-color);
+        }
+        .metric-highlight { font-weight: bold; font-size: 15px; display: block; margin-top: 6px; }
+        .since { color: var(--subtext-color); font-size: 13px; display: block; margin-top: 4px; }
+        .entry-actions { margin-top: 10px; }
+        .hist-top { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    </style>
+</head>
+<body>
+
+    <div class="header-row">
+        <h2>Shift & Fuel Log</h2>
+        <button class="theme-toggle-btn" onclick="toggleTheme()" id="themeBtn">☀️ Sunlight Mode</button>
+    </div>
+
+    <div class="card">
+        <h3>Vehicle Details</h3>
+        <label>Registration Number</label>
+        <input type="text" id="regNumber" value="CEM 1705" oninput="saveVehicle()">
+
+        <label>Fleet Number</label>
+        <input type="text" id="fleetNumber" value="GBT 10" oninput="saveVehicle()">
+
+        <label>Driver Name</label>
+        <input type="text" id="driverName" value="Gerhard" oninput="saveVehicle()">
+    </div>
+
+    <div class="card">
+        <h3 id="formTitle">Current Readings</h3>
+        <label>Date</label>
+        <input type="date" id="entryDate">
+
+        <label>Odometer (km)</label>
+        <input type="number" inputmode="decimal" step="any" id="odometer" placeholder="e.g. 145200">
+
+        <label>Engine Hours</label>
+        <input type="number" inputmode="decimal" step="0.1" id="engineHours" placeholder="e.g. 1250.5">
+
+        <label>Crane Hours</label>
+        <input type="number" inputmode="decimal" step="0.1" id="craneHours" placeholder="e.g. 120.0">
+
+        <label>Liters Filled (tank full to full)</label>
+        <input type="number" inputmode="decimal" step="0.1" id="litersFilled" placeholder="e.g. 250">
+
+        <label>Pump Rand Value (Total cost)</label>
+        <input type="number" inputmode="decimal" step="0.01" id="pumpValue" placeholder="e.g. 5750.00">
+
+        <div class="error-msg" id="errorMsg" role="alert"></div>
+        <button class="action-btn" id="saveBtn" onclick="saveFillUp()">Save Fill-Up & Calculate</button>
+        <button class="action-btn" id="cancelBtn" onclick="cancelEdit()" style="display:none; background: transparent; color: var(--text-color); border: 2px solid var(--input-border);">Cancel edit</button>
+    </div>
+
+    <div class="card">
+        <h3>Recent History & Performance</h3>
+        <div id="totals"></div>
+        <div id="historyList">No logs saved yet.</div>
+        <div class="entry-actions" style="margin-top:16px;">
+            <button class="small-btn" onclick="copyCSV()">Copy as CSV</button>
+        </div>
+        <div class="info-msg" id="infoMsg"></div>
+    </div>
+
+<script>
+    let logs = [];
+    let editIndex = null;
+
+    function loadLogs() {
+        try {
+            const raw = localStorage.getItem('gbt10_logs');
+            logs = raw ? JSON.parse(raw) : [];
+            if (!Array.isArray(logs)) logs = [];
+        } catch (e) { logs = []; }
+    }
+
+    function persist() {
+        try { localStorage.setItem('gbt10_logs', JSON.stringify(logs)); }
+        catch (e) { setInfo("Could not save on this device. Use Copy as CSV to keep your data."); }
+    }
+
+    function setInfo(t) { document.getElementById('infoMsg').innerText = t; }
+
+    function todayISO() {
+        const d = new Date();
+        return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+    }
+
+    function initTheme() {
+        let savedTheme = null;
+        try { savedTheme = localStorage.getItem('gbt10_theme'); } catch (e) {}
+        if (savedTheme === 'sunlight') {
+            document.body.classList.add('sunlight-mode');
+            document.getElementById('themeBtn').innerText = '🌙 Night Mode';
+        }
+    }
+
+    function toggleTheme() {
+        document.body.classList.toggle('sunlight-mode');
+        const isSunlight = document.body.classList.contains('sunlight-mode');
+        try { localStorage.setItem('gbt10_theme', isSunlight ? 'sunlight' : 'night'); } catch (e) {}
+        document.getElementById('themeBtn').innerText = isSunlight ? '🌙 Night Mode' : '☀️ Sunlight Mode';
+    }
+
+    function saveVehicle() {
+        try {
+            localStorage.setItem('gbt10_vehicle', JSON.stringify({
+                reg: document.getElementById('regNumber').value,
+                fleet: document.getElementById('fleetNumber').value,
+                driver: document.getElementById('driverName').value
+            }));
+        } catch (e) {}
+    }
+
+    function loadVehicle() {
+        try {
+            const v = JSON.parse(localStorage.getItem('gbt10_vehicle') || 'null');
+            if (v) {
+                document.getElementById('regNumber').value = v.reg;
+                document.getElementById('fleetNumber').value = v.fleet;
+                document.getElementById('driverName').value = v.driver;
+            }
+        } catch (e) {}
+    }
+
+    function f(n, d) {
+        if (n === null || n === undefined || !isFinite(n)) return '–';
+        return Number(n).toFixed(d);
+    }
+
+    function esc(s) {
+        return String(s).replace(/[&<>"]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[m]));
+    }
+
+    function renderHistory() {
+        const listDiv = document.getElementById('historyList');
+        const totalsDiv = document.getElementById('totals');
+        if (logs.length === 0) {
+            listDiv.innerHTML = "No logs saved yet.";
+            totalsDiv.innerHTML = "";
+            return;
+        }
+
+        let totL = 0, totKm = 0, totEh = 0, totCh = 0, totR = 0;
+        let html = '';
+        for (let i = logs.length - 1; i >= 0; i--) {
+            const curr = logs[i];
+            html += `<div class="log-entry">
+                <div class="hist-top"><strong>${esc(curr.date || '')}</strong><span>${f(curr.liters,1)} L${curr.pumpValue ? ' · R' + f(curr.pumpValue,2) : ''}</span></div>
+                <strong>Odo:</strong> ${curr.odometer} km<br>
+                <strong>Engine Hrs:</strong> ${curr.engineHours} | <strong>Crane Hrs:</strong> ${curr.craneHours}<br>`;
+
+            if (i > 0) {
+                const prev = logs[i - 1];
+                const dist = curr.odometer - prev.odometer;
+                const dEng = curr.engineHours - prev.engineHours;
+                const dCrane = curr.craneHours - prev.craneHours;
+                const kmPerL = dist > 0 && curr.liters > 0 ? dist / curr.liters : null;
+                const lPerEng = dEng > 0 ? curr.liters / dEng : null;
+                const lPerCrane = dCrane > 0 ? curr.liters / dCrane : null;
+                const costPerKm = curr.pumpValue && dist > 0 ? curr.pumpValue / dist : null;
+                const perLitre = curr.pumpValue && curr.liters > 0 ? curr.pumpValue / curr.liters : null;
+
+                totL += curr.liters; totKm += Math.max(dist, 0);
+                totEh += Math.max(dEng, 0); totCh += Math.max(dCrane, 0); totR += curr.pumpValue || 0;
+
+                html += `<span class="metric-highlight" style="color: var(--success-color);">
+                    KM/L: ${f(kmPerL,2)} | Cost/KM: ${costPerKm === null ? 'N/A' : 'R' + f(costPerKm,2)}
+                </span>
+                <span class="metric-highlight" style="color: var(--success-color);">
+                    L/Engine h: ${f(lPerEng,1)} | L/Crane h: ${f(lPerCrane,1)}${perLitre === null ? '' : ' | R' + f(perLitre,2) + '/L'}
+                </span>
+                <span class="since">Since last fill: ${f(dist,0)} km, ${f(dEng,1)} engine h, ${f(dCrane,1)} crane h</span>`;
+            } else {
+                html += `<span class="metric-highlight" style="color: var(--warning-color);">
+                    Baseline entry (liters not counted, waiting for next fill-up)
+                </span>`;
+            }
+            html += `<div class="entry-actions">
+                <button class="small-btn" onclick="editEntry(${i})">Edit</button>
+                <button class="small-btn" onclick="deleteEntry(${i})">Delete</button>
+            </div></div>`;
+        }
+        listDiv.innerHTML = html;
+
+        if (logs.length > 1) {
+            totalsDiv.innerHTML = `<div class="log-entry" style="border-left-color: var(--success-color);">
+                <strong>Overall average (${logs.length - 1} fill-up${logs.length > 2 ? 's' : ''})</strong>
+                <span class="metric-highlight" style="color: var(--success-color);">
+                    KM/L: ${totL > 0 && totKm > 0 ? f(totKm / totL, 2) : '–'} | Cost/KM: ${totR > 0 && totKm > 0 ? 'R' + f(totR / totKm, 2) : 'N/A'}
+                </span>
+                <span class="metric-highlight" style="color: var(--success-color);">
+                    L/Engine h: ${totEh > 0 ? f(totL / totEh, 1) : '–'} | L/Crane h: ${totCh > 0 ? f(totL / totCh, 1) : '–'}
+                </span></div>`;
+        } else {
+            totalsDiv.innerHTML = "";
+        }
+    }
+
+    function clearForm() {
+        ['odometer','engineHours','craneHours','litersFilled','pumpValue'].forEach(id => document.getElementById(id).value = '');
+        document.getElementById('entryDate').value = todayISO();
+        document.getElementById('errorMsg').innerText = '';
+        document.getElementById('formTitle').innerText = 'Current Readings';
+        document.getElementById('saveBtn').innerText = 'Save Fill-Up & Calculate';
+        document.getElementById('cancelBtn').style.display = 'none';
+        editIndex = null;
+    }
+
+    function saveFillUp() {
+        const err = document.getElementById('errorMsg');
+        const odometer = parseFloat(document.getElementById('odometer').value);
+        const engineHours = parseFloat(document.getElementById('engineHours').value);
+        const craneHours = parseFloat(document.getElementById('craneHours').value);
+        const liters = parseFloat(document.getElementById('litersFilled').value);
+        const pumpValue = parseFloat(document.getElementById('pumpValue').value);
+        const date = document.getElementById('entryDate').value || todayISO();
+
+        if (isNaN(odometer) || isNaN(liters) || liters <= 0) {
+            err.innerText = "Fill in at least the odometer and liters filled.";
+            return;
+        }
+
+        const others = logs.filter((x, idx) => idx !== editIndex);
+        const last = others.length ? others[others.length - 1] : null;
+        if (last && odometer <= last.odometer) {
+            err.innerText = "Odometer must be higher than the last fill-up (" + last.odometer + " km). Check the number.";
+            return;
+        }
+        if (last && ((!isNaN(engineHours) && engineHours < last.engineHours) || (!isNaN(craneHours) && craneHours < last.craneHours))) {
+            err.innerText = "Engine or crane hours are lower than the last fill-up. Check the numbers.";
+            return;
+        }
+
+        const entry = {
+            date: date,
+            odometer: odometer,
+            engineHours: isNaN(engineHours) ? 0 : engineHours,
+            craneHours: isNaN(craneHours) ? 0 : craneHours,
+            liters: liters,
+            pumpValue: isNaN(pumpValue) ? 0 : pumpValue
+        };
+
+        if (editIndex !== null) logs[editIndex] = entry; else logs.push(entry);
+        persist();
+        clearForm();
+        renderHistory();
+        setInfo("Saved.");
+    }
+
+    function editEntry(i) {
+        const e = logs[i];
+        editIndex = i;
+        document.getElementById('entryDate').value = /^\d{4}-\d{2}-\d{2}$/.test(e.date) ? e.date : todayISO();
+        document.getElementById('odometer').value = e.odometer;
+        document.getElementById('engineHours').value = e.engineHours;
+        document.getElementById('craneHours').value = e.craneHours;
+        document.getElementById('litersFilled').value = e.liters;
+        document.getElementById('pumpValue').value = e.pumpValue || '';
+        document.getElementById('formTitle').innerText = 'Edit Fill-Up';
+        document.getElementById('saveBtn').innerText = 'Update Fill-Up';
+        document.getElementById('cancelBtn').style.display = 'block';
+        window.scrollTo(0, 0);
+    }
+
+    function cancelEdit() { clearForm(); }
+
+    function deleteEntry(i) {
+        if (!confirm("Delete this fill-up?")) return;
+        logs.splice(i, 1);
+        persist();
+        if (editIndex !== null) clearForm();
+        renderHistory();
+    }
+
+    function copyCSV() {
+        const rows = ["date,odometer_km,engine_hours,crane_hours,liters,rand_total"]
+            .concat(logs.map(e => [e.date, e.odometer, e.engineHours, e.craneHours, e.liters, e.pumpValue].join(",")))
+            .join("\n");
+        try {
+            navigator.clipboard.writeText(rows).then(
+                () => setInfo("Copied. Paste into Notes or a spreadsheet."),
+                () => setInfo(rows));
+        } catch (e) { setInfo(rows); }
+    }
+
+    loadLogs();
+    loadVehicle();
+    initTheme();
+    document.getElementById('entryDate').value = todayISO();
+    renderHistory();
+</script>
+
+</body>
+</html>
