@@ -91,6 +91,9 @@
         .est-row { display: flex; justify-content: space-between; gap: 8px; padding: 6px 0; border-top: 1px solid var(--input-border); }
         .est-row:first-of-type { border-top: 0; }
         .note { color: var(--subtext-color); font-size: 13px; margin-top: 8px; }
+        .qrow { display: flex; gap: 6px; margin-top: 6px; }
+        .qrow button { flex: 1; padding: 10px 4px; font-size: 14px; font-weight: bold; border-radius: 6px; cursor: pointer;
+                       background: var(--input-bg); color: var(--text-color); border: 2px solid var(--input-border); }
         details summary { cursor: pointer; font-weight: bold; color: var(--subtext-color); margin-top: 12px; }
     </style>
 </head>
@@ -111,21 +114,47 @@
 
         <label>Driver Name</label>
         <input type="text" id="driverName" value="Gerhard" oninput="saveVehicle()">
+
+        <label>Truck capacity (pallets)</label>
+        <input type="number" inputmode="numeric" id="capTruck" value="12" oninput="saveVehicle()">
+
+        <label>Trailer capacity (pallets)</label>
+        <input type="number" inputmode="numeric" id="capTrailer" value="12" oninput="saveVehicle()">
     </div>
 
     <div class="card">
         <h3>Load & Trailer</h3>
         <div class="now" id="nowStatus"></div>
         <div class="toggle-row">
-            <button class="tog" id="tgSolo" onclick="setSel('trailer', false)">No trailer</button>
-            <button class="tog" id="tgTrailer" onclick="setSel('trailer', true)">Trailer on</button>
+            <button class="tog" id="tgSolo" onclick="setTrailer(false)">No trailer</button>
+            <button class="tog" id="tgTrailer" onclick="setTrailer(true)">Trailer on</button>
         </div>
-        <div class="toggle-row">
-            <button class="tog" id="tgEmpty" onclick="setSel('loaded', false)">Empty</button>
-            <button class="tog" id="tgLoaded" onclick="setSel('loaded', true)">Loaded</button>
+
+        <label>Pallets on truck</label>
+        <input type="number" inputmode="numeric" id="truckP" value="0">
+        <div class="qrow">
+            <button onclick="setP('truckP',0)">Empty</button>
+            <button onclick="adjP('truckP',-2)">−2</button>
+            <button onclick="adjP('truckP',-4)">−4</button>
+            <button onclick="setP('truckP','full')">Full</button>
         </div>
+
+        <div id="trailerBlock">
+            <label>Pallets on trailer</label>
+            <input type="number" inputmode="numeric" id="trailerP" value="0">
+            <div class="qrow">
+                <button onclick="setP('trailerP',0)">Empty</button>
+                <button onclick="adjP('trailerP',-2)">−2</button>
+                <button onclick="adjP('trailerP',-4)">−4</button>
+                <button onclick="setP('trailerP','full')">Full</button>
+            </div>
+        </div>
+
         <label>Odometer now (km)</label>
         <input type="number" inputmode="decimal" step="any" id="evOdo" placeholder="e.g. 145230">
+
+        <label>Invoice number (optional)</label>
+        <input type="text" id="evInv" placeholder="e.g. 10452" maxlength="20">
         <div class="error-msg" id="evError" role="alert"></div>
         <button class="action-btn" style="margin-top:8px;" onclick="logStatus()">Log status change</button>
         <details>
@@ -174,15 +203,29 @@
     let logs = [];
     let events = [];
     let editIndex = null;
-    let selTrailer = false, selLoaded = false;
-    const COND = { SE: 'Solo empty', SL: 'Solo loaded', TE: 'Trailer empty', TL: 'Trailer loaded' };
+    let selTrailer = false;
 
+    function caps() {
+        const t = parseInt(document.getElementById('capTruck').value, 10);
+        const r = parseInt(document.getElementById('capTrailer').value, 10);
+        return { truck: t > 0 ? t : 12, trailer: r > 0 ? r : 12 };
+    }
+    function normEvent(e) {
+        if (e.truckP === undefined) {
+            const c = caps();
+            e.truckP = e.loaded ? c.truck : 0;
+            e.trailerP = e.trailer && e.loaded ? c.trailer : 0;
+        }
+        if (!e.trailer) e.trailerP = 0;
+        return e;
+    }
     function loadEvents() {
         try {
             const raw = localStorage.getItem('gbt10_status');
             events = raw ? JSON.parse(raw) : [];
             if (!Array.isArray(events)) events = [];
         } catch (e) { events = []; }
+        events = events.map(normEvent);
         events.sort((a, b) => a.odo - b.odo);
     }
     function persistEvents() {
@@ -190,17 +233,30 @@
         catch (e) { setInfo("Could not save on this device."); }
     }
     function statusText(s) {
-        return (s.trailer ? 'Trailer on' : 'No trailer') + ' · ' + (s.loaded ? 'Loaded' : 'Empty');
+        return s.trailer
+            ? 'Trailer on · truck ' + s.truckP + ', trailer ' + s.trailerP + ' pallets'
+            : 'No trailer · truck ' + s.truckP + ' pallets';
     }
-    function setSel(kind, val) {
-        if (kind === 'trailer') selTrailer = val; else selLoaded = val;
+    function setTrailer(v) {
+        selTrailer = v;
         paintToggles();
     }
     function paintToggles() {
         document.getElementById('tgSolo').classList.toggle('on', !selTrailer);
         document.getElementById('tgTrailer').classList.toggle('on', selTrailer);
-        document.getElementById('tgEmpty').classList.toggle('on', !selLoaded);
-        document.getElementById('tgLoaded').classList.toggle('on', selLoaded);
+        document.getElementById('trailerBlock').style.display = selTrailer ? 'block' : 'none';
+    }
+    function setP(id, v) {
+        const c = caps();
+        const cap = id === 'truckP' ? c.truck : c.trailer;
+        document.getElementById(id).value = v === 'full' ? cap : v;
+    }
+    function adjP(id, d) {
+        const c = caps();
+        const cap = id === 'truckP' ? c.truck : c.trailer;
+        let v = parseInt(document.getElementById(id).value, 10);
+        if (isNaN(v)) v = 0;
+        document.getElementById(id).value = Math.min(cap, Math.max(0, v + d));
     }
     function renderStatus() {
         const now = document.getElementById('nowStatus');
@@ -214,22 +270,33 @@
         if (!events.length) { list.innerHTML = '<div class="note">Nothing logged.</div>'; return; }
         let h = '';
         for (let i = events.length - 1; i >= 0; i--) {
-            const e = events[i];
-            h += `<div class="est-row"><span>${esc(e.odo)} km · ${statusText(e)}</span><button class="small-btn" style="margin:0" onclick="deleteEvent(${i})">Delete</button></div>`;
+            const e = events[i], nx = events[i + 1];
+            const leg = nx ? f(nx.odo - e.odo, 0) + ' km at this load' : 'Current leg';
+            h += `<div class="est-row"><span>${esc(e.odo)} km · ${statusText(e)}${e.inv ? ' · Inv ' + esc(e.inv) : ''}<span class="mix">${leg}</span></span><button class="small-btn" style="margin:0" onclick="deleteEvent(${i})">Delete</button></div>`;
         }
         list.innerHTML = h;
     }
     function logStatus() {
         const err = document.getElementById('evError');
         const odo = parseFloat(document.getElementById('evOdo').value);
+        const c = caps();
+        let tp = parseInt(document.getElementById('truckP').value, 10);
+        let rp = parseInt(document.getElementById('trailerP').value, 10);
         if (isNaN(odo)) { err.innerText = "Enter the odometer reading."; return; }
+        if (isNaN(tp)) tp = 0;
+        if (isNaN(rp)) rp = 0;
+        if (!selTrailer) rp = 0;
+        if (tp < 0 || tp > c.truck) { err.innerText = "Truck pallets must be 0 to " + c.truck + "."; return; }
+        if (rp < 0 || rp > c.trailer) { err.innerText = "Trailer pallets must be 0 to " + c.trailer + "."; return; }
         const last = events.length ? events[events.length - 1] : null;
         if (last && odo < last.odo) { err.innerText = "Odometer is lower than the last status change (" + last.odo + " km)."; return; }
-        if (last && last.trailer === selTrailer && last.loaded === selLoaded) { err.innerText = "That is already the current status."; return; }
+        const inv = document.getElementById('evInv').value.trim();
+        if (last && last.trailer === selTrailer && last.truckP === tp && last.trailerP === rp && !inv) { err.innerText = "That is already the current status."; return; }
         err.innerText = '';
-        events.push({ odo: odo, trailer: selTrailer, loaded: selLoaded, date: todayISO() });
+        events.push({ odo: odo, trailer: selTrailer, truckP: tp, trailerP: rp, inv: inv, date: todayISO() });
         persistEvents();
         document.getElementById('evOdo').value = '';
+        document.getElementById('evInv').value = '';
         renderStatus();
         renderHistory();
         setInfo("Status logged.");
@@ -242,14 +309,18 @@
         renderHistory();
     }
 
-    // km between two odometer readings, split by condition
+    // km between two odometer readings: with/without trailer, empty/loaded, pallet-km
     function kmBreakdown(P, X) {
-        const out = { SE: 0, SL: 0, TE: 0, TL: 0, U: 0 };
+        const out = { S: 0, T: 0, E: 0, L: 0, PK: 0, U: 0 };
         let cur = null, pos = P;
         events.forEach(e => { if (e.odo <= P) cur = e; });
-        function add(s, k) {
+        function add(st, k) {
             if (k <= 0) return;
-            if (!s) out.U += k; else out[(s.trailer ? 'T' : 'S') + (s.loaded ? 'L' : 'E')] += k;
+            if (!st) { out.U += k; return; }
+            const pal = st.truckP + (st.trailer ? st.trailerP : 0);
+            if (st.trailer) out.T += k; else out.S += k;
+            out.PK += k * pal;
+            if (pal > 0) out.L += k; else out.E += k;
         }
         events.filter(e => e.odo > P && e.odo < X).forEach(e => { add(cur, e.odo - pos); pos = e.odo; cur = e; });
         add(cur, X - pos);
@@ -279,6 +350,8 @@
         return x;
     }
     function fitRates(rows, cols) {
+        const sc = {};
+        cols.forEach(k => { sc[k] = Math.sqrt(rows.reduce((t, r) => t + r.x[k] * r.x[k], 0)) || 1; });
         let active = cols.slice();
         while (active.length) {
             const n = active.length;
@@ -286,17 +359,16 @@
             const b = new Array(n).fill(0);
             rows.forEach(r => {
                 active.forEach((ci, i) => {
-                    b[i] += r.x[ci] * r.y;
-                    active.forEach((cj, j) => { A[i][j] += r.x[ci] * r.x[cj]; });
+                    b[i] += (r.x[ci] / sc[ci]) * r.y;
+                    active.forEach((cj, j) => { A[i][j] += (r.x[ci] / sc[ci]) * (r.x[cj] / sc[cj]); });
                 });
             });
-            let tr = 0; for (let i = 0; i < n; i++) tr += A[i][i];
-            for (let i = 0; i < n; i++) A[i][i] += 1e-6 * tr / n;
+            for (let i = 0; i < n; i++) A[i][i] += 1e-6;
             const sol = solve(A, b);
             if (!sol) return null;
             let worst = -1, wv = 0;
             sol.forEach((v, i) => { if (v < wv) { wv = v; worst = i; } });
-            if (worst === -1) { const res = {}; active.forEach((ci, i) => res[ci] = sol[i]); return res; }
+            if (worst === -1) { const res = {}; active.forEach((ci, i) => res[ci] = sol[i] / sc[ci]); return res; }
             active.splice(worst, 1);
         }
         return null;
@@ -343,7 +415,9 @@
             localStorage.setItem('gbt10_vehicle', JSON.stringify({
                 reg: document.getElementById('regNumber').value,
                 fleet: document.getElementById('fleetNumber').value,
-                driver: document.getElementById('driverName').value
+                driver: document.getElementById('driverName').value,
+                capTruck: document.getElementById('capTruck').value,
+                capTrailer: document.getElementById('capTrailer').value
             }));
         } catch (e) {}
     }
@@ -355,6 +429,8 @@
                 document.getElementById('regNumber').value = v.reg;
                 document.getElementById('fleetNumber').value = v.fleet;
                 document.getElementById('driverName').value = v.driver;
+                if (v.capTruck) document.getElementById('capTruck').value = v.capTruck;
+                if (v.capTrailer) document.getElementById('capTrailer').value = v.capTrailer;
             }
         } catch (e) {}
     }
@@ -374,6 +450,7 @@
         if (logs.length === 0) {
             listDiv.innerHTML = "No logs saved yet.";
             totalsDiv.innerHTML = "";
+            document.getElementById('estimates').innerHTML = "";
             return;
         }
 
@@ -398,7 +475,10 @@
                 const perLitre = curr.pumpValue && curr.liters > 0 ? curr.pumpValue / curr.liters : null;
                 const mix = kmBreakdown(prev.odometer, curr.odometer);
                 const parts = [];
-                ['SE','SL','TE','TL'].forEach(k => { if (mix[k] > 0) parts.push(COND[k] + ' ' + f(mix[k],0) + ' km'); });
+                if (mix.S > 0) parts.push('Solo ' + f(mix.S,0) + ' km');
+                if (mix.T > 0) parts.push('With trailer ' + f(mix.T,0) + ' km');
+                if (mix.E > 0) parts.push('Empty ' + f(mix.E,0) + ' km');
+                if (mix.L > 0) parts.push('Loaded ' + f(mix.L,0) + ' km (avg ' + f(mix.PK / mix.L, 1) + ' pallets)');
                 if (mix.U > 0 && parts.length) parts.push('Untracked ' + f(mix.U,0) + ' km');
 
                 totL += curr.liters; totKm += Math.max(dist, 0);
@@ -450,12 +530,13 @@
             if (c.pumpValue > 0) { totR += c.pumpValue; totL += c.liters; }
             const m = kmBreakdown(p.odometer, c.odometer);
             if (m.U / dist > 0.1) continue;
-            rows.push({ x: { SE: m.SE, SL: m.SL, TE: m.TE, TL: m.TL, CR: Math.max(c.craneHours - p.craneHours, 0) }, y: c.liters, dist: dist });
+            rows.push({ x: { S: m.S, T: m.T, PK: m.PK, CR: Math.max(c.craneHours - p.craneHours, 0) }, y: c.liters, dist: dist });
         }
-        if (!events.length) { box.innerHTML = '<div class="note">Log your load and trailer status above to get a cost breakdown per condition.</div>'; return; }
-        const cols = ['SE','SL','TE','TL','CR'].filter(k => rows.some(r => r.x[k] > 0));
+        if (!events.length) { box.innerHTML = '<div class="note">Log your pallets and trailer status above to get a cost breakdown.</div>'; return; }
+        const keys = ['S','T','PK','CR'];
+        const cols = keys.filter(k => rows.some(r => r.x[k] > 0));
         const enough = {};
-        ['SE','SL','TE','TL','CR'].forEach(k => { enough[k] = rows.filter(r => r.x[k] > (k === 'CR' ? 0 : 0.05 * r.dist)).length >= 2; });
+        keys.forEach(k => { enough[k] = rows.filter(r => r.x[k] > (k === 'S' || k === 'T' ? 0.05 * r.dist : 0)).length >= 2; });
         if (rows.length < cols.length + 1 || rows.length < 3) {
             box.innerHTML = `<div class="note">Cost breakdown needs about 4+ fill-ups with tracked status (have ${rows.length}). Keep logging.</div>`;
             return;
@@ -463,17 +544,28 @@
         const rates = fitRates(rows, cols);
         if (!rates) { box.innerHTML = '<div class="note">Not enough variety yet to separate the conditions.</div>'; return; }
         const rl = totL > 0 ? totR / totL : null;
-        let h = '<div class="log-entry" style="border-left-color: var(--success-color);"><strong>Estimated running cost by condition</strong>';
-        ['SE','SL','TE','TL'].forEach(k => {
-            const r = rates[k];
+        const c = caps();
+        const capS = c.truck, capT = c.truck + c.trailer;
+        const aS = rates.S || 0, aT = rates.T || 0, p = rates.PK || 0;
+        function line(label, a, n, ok) {
             let right = 'not enough data yet';
-            if (r > 0 && enough[k]) right = f(1 / r, 2) + ' km/L' + (rl ? ' · R' + f(r * rl, 2) + '/km' : '');
-            h += `<div class="est-row"><span>${COND[k]}</span><span>${right}</span></div>`;
-        });
+            const lpk = a + p * n;
+            if (ok && lpk > 0) right = f(1 / lpk, 2) + ' km/L' + (rl ? ' · R' + f(lpk * rl, 2) + '/km' : '');
+            return `<div class="est-row"><span>${label}</span><span>${right}</span></div>`;
+        }
+        let h = '<div class="log-entry" style="border-left-color: var(--success-color);"><strong>Estimated running cost</strong>';
+        h += line('Truck empty', aS, 0, enough.S && aS > 0);
+        h += line('Truck full (' + capS + ' pallets)', aS, capS, enough.S && aS > 0 && enough.PK && p > 0);
+        h += line('Truck + trailer empty', aT, 0, enough.T && aT > 0);
+        h += line('Truck + trailer full (' + capT + ')', aT, capT, enough.T && aT > 0 && enough.PK && p > 0);
+        if (enough.PK && p > 0) {
+            h += `<div class="est-row"><span>Cost per pallet-km</span><span>${rl ? 'R' + f(p * rl, 3) : f(p, 4) + ' L'}</span></div>`;
+            if (enough.T && aT > 0) h += `<div class="est-row"><span>Full rig (${capT} pallets)</span><span>${f(capT / (aT + p * capT), 1)} pallet-km per L</span></div>`;
+        }
         if (rates.CR !== undefined && enough.CR) {
             h += `<div class="est-row"><span>Crane working</span><span>${f(rates.CR,1)} L/h${rl ? ' · R' + f(rates.CR * rl, 0) + '/h' : ''}</span></div>`;
         }
-        h += `<div class="note">Estimated from ${rows.length} fill-ups. Rough until you have 8–10 with different mixes. Fuel only, excludes tyres, servicing, wages and licences.</div></div>`;
+        h += `<div class="note">Estimated from ${rows.length} fill-ups. Rough until you have 8–10 with different loads. Fuel only, excludes tyres, servicing, wages and licences.</div></div>`;
         box.innerHTML = h;
     }
 
@@ -557,7 +649,7 @@
         let rows = ["date,odometer_km,engine_hours,crane_hours,liters,rand_total"]
             .concat(logs.map(e => [e.date, e.odometer, e.engineHours, e.craneHours, e.liters, e.pumpValue].join(",")))
             .join("\n");
-        const evRows = events.length ? "\n\nodometer_km,trailer,loaded\n" + events.map(e => [e.odo, e.trailer ? 'yes' : 'no', e.loaded ? 'yes' : 'no'].join(",")).join("\n") : "";
+        const evRows = events.length ? "\n\nodometer_km,trailer,truck_pallets,trailer_pallets,invoice\n" + events.map(e => [e.odo, e.trailer ? 'yes' : 'no', e.truckP, e.trailerP, '"' + String(e.inv || '').replace(/"/g, '') + '"'].join(",")).join("\n") : "";
         rows += evRows;
         try {
             navigator.clipboard.writeText(rows).then(
@@ -567,11 +659,16 @@
     }
 
     loadLogs();
+    loadVehicle();
     loadEvents();
-    if (events.length) { const c = events[events.length - 1]; selTrailer = c.trailer; selLoaded = c.loaded; }
+    if (events.length) {
+        const c = events[events.length - 1];
+        selTrailer = c.trailer;
+        document.getElementById('truckP').value = c.truckP;
+        document.getElementById('trailerP').value = c.trailerP;
+    }
     paintToggles();
     renderStatus();
-    loadVehicle();
     initTheme();
     document.getElementById('entryDate').value = todayISO();
     renderHistory();
