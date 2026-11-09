@@ -12,13 +12,14 @@
         ['Air Vent',1.30,0],['Cobble Paver 100x100mm',1.5,0],['Sand Bags',40,0],['Stone 19mm Bag',40,0],
         ['Stone 13mm Bag',40,0],['Crusher Dust Bag',40,0],['Concrete 19mm Mix Bag',40,0],['Quick Mix Concrete Bag',40,0],
         ['Quick Mix Mortar Bag',40,0],['110 Lintels',14.30,0],['150 Lintels',19.00,0],['Brick Imperial',3.60,500],
-        ['Brick Maxi',3.80,400],['Block 90',10.10,130],['Block 140',14.60,100],['Block 190',16.20,75],
+        ['Brick Maxi',3.80,400],['Brick ROK NFX Bredasdorp (500P)',3.0,500],['Block 90',10.10,130],['Block 140',14.60,100],['Block 190',16.20,75],
         ['Bond Paver',2.20,0],['Interlocker paver',3.30,0]
     ];
     let prods = null;
     try { prods = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
     if (!Array.isArray(prods) || !prods.length) prods = D.map(a => ({ n: a[0], kg: a[1], pp: a[2] }));
     function saveProds() { try { localStorage.setItem(KEY, JSON.stringify(prods)); } catch (e) {} }
+    let sel = 0;
 
     let lines = [];
     const lastEv = events.length ? events[events.length - 1] : null;
@@ -48,12 +49,20 @@
     const wBox = document.createElement('div');
     document.getElementById('estimates').after(wBox);
 
-    function fillSel() {
-        document.getElementById('cgProd').innerHTML = prods.map((p, i) => '<option value="' + i + '">' + esc(p.n) + ' (' + p.kg + ' kg)</option>').join('');
+    function fillSel(i) {
+        if (i !== undefined) sel = i;
+        if (sel >= prods.length || sel < 0) sel = 0;
+        const el = document.getElementById('cgProd');
+        el.innerHTML = prods.map((p, k) => '<option value="' + k + '">' + esc(p.n) + ' (' + p.kg + ' kg)</option>').join('') +
+            '<option value="new">+ Add new product...</option>';
+        el.value = String(sel);
         pickProd();
     }
     function pickProd() {
-        const p = prods[parseInt(document.getElementById('cgProd').value, 10)];
+        const el = document.getElementById('cgProd');
+        if (el.value === 'new') { if (!pmAdd()) el.value = String(sel); return; }
+        sel = parseInt(el.value, 10) || 0;
+        const p = prods[sel];
         document.getElementById('cgPP').value = p && p.pp ? p.pp : '';
     }
     document.getElementById('cgProd').onchange = pickProd;
@@ -102,12 +111,13 @@
     };
     window.pmDel = function (i) { if (confirm('Remove ' + prods[i].n + '?')) { prods.splice(i, 1); saveProds(); fillSel(); pmRender(); } };
     window.pmAdd = function () {
-        const n = prompt('Product name?'); if (!n) return;
+        const n = prompt('Product name?'); if (!n || !n.trim()) return false;
         const kg = parseFloat(prompt('Weight of one piece (kg)?'));
-        if (!(kg > 0)) return;
+        if (!(kg > 0)) return false;
         const pp = parseInt(prompt('Pieces per pallet? (leave empty if unknown)'), 10);
         prods.push({ n: n.trim(), kg: kg, pp: pp > 0 ? pp : 0 });
-        saveProds(); fillSel(); pmRender();
+        saveProds(); fillSel(prods.length - 1); pmRender();
+        return true;
     };
 
     // ---- log status: stamp the cargo weight on the new status change ----
@@ -183,4 +193,3 @@
     fillSel(); pmRender(); cgRender();
     renderStatus(); renderHistory();
 })();
-
