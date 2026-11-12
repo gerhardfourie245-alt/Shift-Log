@@ -9,6 +9,7 @@
     hist = C[3];
   const hdr = document.querySelector(".header-row");
   const $ = (id) => document.getElementById(id);
+  let cur = "home"; // which screen is open
 
   const st = document.createElement("style");
   st.textContent =
@@ -20,9 +21,9 @@
   const home = document.createElement("div");
   home.innerHTML =
     '<div class="card"><h3>What are you doing?</h3><div class="now" id="homeNow"></div><div class="info-msg" id="homeMsg"></div>' +
-    '<button class="hbtn" onclick="shiftGo(\'fill\')">⛽ Filled up</button>' +
-    '<button class="hbtn" onclick="shiftGo(\'load\')">📦 Loaded</button>' +
-    '<button class="hbtn" onclick="shiftGo(\'off\')">⬇️ Offloaded</button>' +
+    '<button class="hbtn" onclick="shiftGo(\'fill\')">⛽ Filling up</button>' +
+    '<button class="hbtn" onclick="shiftGo(\'load\')">📦 Loading</button>' +
+    '<button class="hbtn" onclick="shiftGo(\'off\')">⬇️ Offloading</button>' +
     '<button class="hbtn" onclick="shiftGo(\'trl\')">🔗 Trailer on / off</button>' +
     '<div class="hrow"><button class="hbtn alt" onclick="shiftGo(\'hist\')">Results &amp; history</button>' +
     '<button class="hbtn alt" onclick="shiftGo(\'set\')">Settings</button></div></div>';
@@ -78,7 +79,7 @@
 
   const M = {
     load: {
-      t: "Loaded",
+      t: "Loading",
       h: "Pick the product and pallets, tap Add to load. Then enter the odometer and tap Log.",
       cargo: 1,
       tog: 1,
@@ -86,7 +87,7 @@
       ps: "Pallets are filled in from the cargo. Tap to adjust.",
     },
     off: {
-      t: "Offloaded",
+      t: "Offloading",
       h: "Tap Everything is off, or open the pallets below and tap how many came off. Then enter the odometer and tap Log.",
       cargo: 0,
       tog: 0,
@@ -104,6 +105,7 @@
   };
 
   window.shiftGo = function (m, msg) {
+    cur = m;
     [veh, load, read, hist].forEach((c) => (c.style.display = "none"));
     home.style.display = m === "home" ? "block" : "none";
     back.style.display = m === "home" ? "none" : "block";
@@ -133,14 +135,14 @@
 
   // keep pallets in step with the cargo lines
   function sync() {
-    if (!window.cgPallets) return;
+    if (typeof cgPallets !== "function" || typeof caps !== "function") return;
     const k = cgPallets(),
       c = caps();
     const t = Math.min(k, c.truck),
       r = selTrailer ? Math.min(k - t, c.trailer) : 0;
     $("truckP").value = t;
     $("trailerP").value = r;
-    cgRender();
+    if (typeof cgRender === "function") cgRender();
   }
   ["cgAdd", "cgDel", "cgClear"].forEach((k) => {
     const o = window[k];
@@ -150,10 +152,25 @@
         sync();
       };
   });
+  // backup: also sync after Add to load / Clear load / remove-line taps,
+  // in case the buttons don't go through the wrapped functions above
+  load.addEventListener("click", function (e) {
+    const b = e.target.closest("button");
+    if (!b || cur !== "load") return;
+    const tx = (b.textContent || "").trim();
+    const oc = b.getAttribute("onclick") || "";
+    if (
+      tx === "Add to load" ||
+      tx === "Clear load" ||
+      /^cg(Add|Del|Clear)/.test(oc) ||
+      /^[×✕✖xX]$/.test(tx)
+    )
+      setTimeout(sync, 0);
+  });
   const oSetT = window.setTrailer;
   window.setTrailer = function (v) {
     oSetT(v);
-    if (window.cgPallets && cgPallets() > 0) sync();
+    if (typeof cgPallets === "function" && cgPallets() > 0) sync();
   };
   const oAdj = window.adjP;
   window.adjP = function (id, d) {
@@ -166,6 +183,14 @@
   // after a successful save, go back to the start screen
   const oLog = window.logStatus;
   window.logStatus = function () {
+    // safety net: cargo is listed but pallet boxes are still 0 -> fill them in
+    if (
+      cur === "load" &&
+      typeof cgPallets === "function" &&
+      cgPallets() > 0 &&
+      (+$("truckP").value || 0) + (+$("trailerP").value || 0) === 0
+    )
+      sync();
     const before = events.length;
     oLog();
     if (events.length > before) shiftGo("home", "Saved ✓");
@@ -195,4 +220,61 @@
 
   updNow();
   shiftGo("home");
+})();
+
+// Fill-up: enter Rands per liter, app works out the total.
+// The saved entry still stores the total, so history, averages and CSV stay the same.
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const pv = $("pumpValue"),
+    lt = $("litersFilled");
+  if (!pv || !lt) return;
+  pv.previousElementSibling.textContent = "Rands per liter";
+  pv.placeholder = "e.g. 32.57";
+  const tot = document.createElement("div");
+  tot.className = "note";
+  pv.after(tot);
+  const money = (r, l) => (Math.round(r * l * 100) / 100).toFixed(2);
+  function upd() {
+    const r = parseFloat(pv.value),
+      l = parseFloat(lt.value);
+    tot.textContent = r > 0 && l > 0 ? "Total: R" + money(r, l) : "";
+  }
+  pv.addEventListener("input", upd);
+  lt.addEventListener("input", upd);
+
+  let keep = null; // when editing: the original total, kept if rate and liters are untouched
+  const oSave = window.saveFillUp;
+  window.saveFillUp = function () {
+    const rate = pv.value,
+      r = parseFloat(rate),
+      l = parseFloat(lt.value);
+    let total = "";
+    if (keep && rate === keep.rate && l === keep.liters) total = String(keep.total);
+    else if (r > 0 && l > 0) total = money(r, l);
+    pv.value = total;
+    oSave();
+    if (pv.value !== "") pv.value = rate; // save was refused: put the rate back
+    else {
+      keep = null;
+      upd();
+    }
+  };
+  const oEdit = window.editEntry;
+  window.editEntry = function (i) {
+    oEdit(i);
+    const e = logs[i];
+    keep = null;
+    if (e && e.pumpValue > 0 && e.liters > 0) {
+      pv.value = String(+(e.pumpValue / e.liters).toFixed(4));
+      keep = { rate: pv.value, liters: e.liters, total: e.pumpValue };
+    }
+    upd();
+  };
+  const oCancel = window.cancelEdit;
+  window.cancelEdit = function () {
+    keep = null;
+    oCancel();
+    upd();
+  };
 })();
