@@ -40,7 +40,8 @@
     let lines = [];
     const lastEv = events.length ? events[events.length - 1] : null;
     if (lastEv && Array.isArray(lastEv.cargo)) lines = lastEv.cargo.map(x => Object.assign({}, x));
-    const total = () => lines.reduce((t, l) => t + l.p * l.pp * l.kg, 0);
+    const isPc = p => !!p && /^Lintel /.test(p.n);   // lintels are counted by piece, not pallets
+    const total = () => lines.reduce((t, l) => t + (l.u ? l.q * l.kg : l.p * l.pp * l.kg), 0);
 
     // ---- styles + UI ----
     const st = document.createElement('style');
@@ -79,7 +80,10 @@
         if (el.value === 'new') { if (!pmAdd()) el.value = String(sel); return; }
         sel = parseInt(el.value, 10) || 0;
         const p = prods[sel];
-        document.getElementById('cgPP').value = p && p.pp ? p.pp : '';
+        const pc = isPc(p);
+        document.getElementById('cgPal').placeholder = pc ? 'Number of lintels' : 'Pallets';
+        document.getElementById('cgPP').style.display = pc ? 'none' : '';
+        document.getElementById('cgPP').value = !pc && p && p.pp ? p.pp : '';
     }
     document.getElementById('cgProd').onchange = pickProd;
 
@@ -89,7 +93,7 @@
         let h = '', pal = 0;
         lines.forEach((l, i) => {
             pal += l.p;
-            h += '<div class="est-row"><span>' + l.p + ' × ' + esc(l.n) + ' <span class="mix">' + l.pp + ' per pallet · ' + f(l.p * l.pp * l.kg, 0) + ' kg</span></span>' +
+            h += '<div class="est-row"><span>' + (l.u ? l.q : l.p) + ' × ' + esc(l.n) + ' <span class="mix">' + (l.u ? '' : l.pp + ' per pallet · ') + f(l.u ? l.q * l.kg : l.p * l.pp * l.kg, 0) + ' kg</span></span>' +
                 '<button class="small-btn" style="margin:0" onclick="cgDel(' + i + ')">✕</button></div>';
         });
         h += '<div class="now" style="margin-top:8px">Total: ' + f(total(), 0) + ' kg (' + f(total() / 1000, 2) + ' t) on ' + pal + ' pallets</div>';
@@ -102,6 +106,14 @@
     window.cgAdd = function () {
         const p = prods[parseInt(document.getElementById('cgProd').value, 10)];
         const n = parseInt(document.getElementById('cgPal').value, 10);
+        if (isPc(p)) {
+            if (!(n > 0)) { document.getElementById('evError').innerText = 'Enter the number of lintels.'; return; }
+            document.getElementById('evError').innerText = '';
+            lines.push({ n: p.n, p: 0, q: n, pp: 1, kg: p.kg, u: 'pc' });
+            document.getElementById('cgPal').value = '';
+            cgRender();
+            return;
+        }
         const pp = parseInt(document.getElementById('cgPP').value, 10);
         if (!p || !(n > 0) || !(pp > 0)) { document.getElementById('evError').innerText = 'Enter pallets and pieces per pallet.'; return; }
         document.getElementById('evError').innerText = '';
@@ -144,7 +156,7 @@
         if (events.length > before) {
             const e = events[events.length - 1];
             const pal = e.truckP + (e.trailer ? e.trailerP : 0);
-            if (pal === 0) { lines = []; e.kg = 0; e.cargo = []; }
+            if (pal === 0 && !lines.some(l => l.u)) { lines = []; e.kg = 0; e.cargo = []; }
             else if (lines.length) { e.kg = total(); e.cargo = lines.map(x => Object.assign({}, x)); }
             persistEvents();
             cgRender();
@@ -168,7 +180,7 @@
         function add(s, k) {
             if (!s || k <= 0) return;
             const pal = s.truckP + (s.trailer ? s.trailerP : 0);
-            if (pal <= 0) return;
+            if (pal <= 0 && !(s.kg > 0)) return;
             if (s.kg === undefined) { unk += k; return; }
             lk += k; kgk += s.kg * k;
         }
@@ -201,7 +213,7 @@
         if (events.length) rows += '\n\nodometer_km,trailer,truck_pallets,trailer_pallets,invoice,cargo_kg,cargo\n' +
             events.map(e => [e.odo, e.trailer ? 'yes' : 'no', e.truckP, e.trailerP, '"' + String(e.inv || '').replace(/"/g, '') + '"',
                 e.kg === undefined ? '' : Math.round(e.kg),
-                '"' + (e.cargo || []).map(l => l.p + 'x' + l.n + ' @' + l.pp).join('; ').replace(/"/g, '') + '"'].join(',')).join('\n');
+                '"' + (e.cargo || []).map(l => l.u ? l.q + 'x' + l.n : l.p + 'x' + l.n + ' @' + l.pp).join('; ').replace(/"/g, '') + '"'].join(',')).join('\n');
         try { navigator.clipboard.writeText(rows).then(() => setInfo('Copied. Paste into Notes or a spreadsheet.'), () => setInfo(rows)); }
         catch (e) { setInfo(rows); }
     };
