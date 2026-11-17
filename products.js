@@ -35,6 +35,20 @@
             localStorage.setItem('gbt10_lintels_v1', '1');
         }
     } catch (e) {}
+    // ---- bond pavers in four colours. Runs once, copies the weight and pieces per pallet of your current Bond Paver.
+    try {
+        if (!localStorage.getItem('gbt10_bond_v1')) {
+            const old = prods.find(p => p.n === 'Bond Paver');
+            const kg = old ? old.kg : 2.20, pp = old && old.pp ? old.pp : 640;
+            const at = old ? prods.indexOf(old) : prods.length;
+            prods = prods.filter(p => p.n !== 'Bond Paver');
+            const add = ['Grey', 'Charcoal', 'Red', 'Tan'].map(c => ({ n: 'Bond Paver - ' + c, kg: kg, pp: pp }))
+                .filter(a => !prods.some(p => p.n === a.n));
+            prods.splice(at, 0, ...add);
+            saveProds();
+            localStorage.setItem('gbt10_bond_v1', '1');
+        }
+    } catch (e) {}
     let sel = 0;
 
     let lines = [];
@@ -52,7 +66,7 @@
 
     const box = document.createElement('div');
     box.innerHTML =
-        '<label>Cargo on board now (weight) · v4</label>' +
+        '<label>Cargo on board now (weight) · v5</label>' +
         '<select id="cgProd"></select>' +
         '<div class="qrow"><input style="flex:1;min-width:0" type="number" inputmode="numeric" id="cgPal" placeholder="Pallets">' +
         '<input style="flex:1;min-width:0" type="number" inputmode="numeric" id="cgPP" placeholder="Pieces per pallet"></div>' +
