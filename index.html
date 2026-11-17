@@ -303,7 +303,7 @@
         const last = events.length ? events[events.length - 1] : null;
         if (last && odo < last.odo) { err.innerText = "Odometer is lower than the last status change (" + last.odo + " km)."; return; }
         const inv = document.getElementById('evInv').value.trim();
-        if (last && last.trailer === selTrailer && last.truckP === tp && last.trailerP === rp && !inv) { err.innerText = "That is already the current status."; return; }
+        if (last && last.trailer === selTrailer && last.truckP === tp && last.trailerP === rp && !inv && !(window.cargoChanged && window.cargoChanged(last))) { err.innerText = "That is already the current status."; return; }
         err.innerText = '';
         events.push({ odo: odo, trailer: selTrailer, truckP: tp, trailerP: rp, inv: inv, date: todayISO() });
         persistEvents();
