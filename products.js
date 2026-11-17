@@ -52,7 +52,7 @@
 
     const box = document.createElement('div');
     box.innerHTML =
-        '<label>Cargo on board now (weight)</label>' +
+        '<label>Cargo on board now (weight) · v3</label>' +
         '<select id="cgProd"></select>' +
         '<div class="qrow"><input style="flex:1;min-width:0" type="number" inputmode="numeric" id="cgPal" placeholder="Pallets">' +
         '<input style="flex:1;min-width:0" type="number" inputmode="numeric" id="cgPP" placeholder="Pieces per pallet"></div>' +
@@ -148,6 +148,12 @@
         return true;
     };
 
+    // ---- lets the main script accept a status change when only the cargo weight changed (e.g. lintels, 0 pallets) ----
+    window.cargoChanged = function (last) {
+        const now = lines.length ? total() : 0;
+        return Math.round(now) !== Math.round((last && last.kg) || 0);
+    };
+
     // ---- log status: stamp the cargo weight on the new status change ----
     const origLog = window.logStatus;
     window.logStatus = function () {
@@ -171,6 +177,8 @@
         if (!events.length) return;
         const c = events[events.length - 1];
         if (c.kg !== undefined) document.getElementById('nowStatus').innerText += ' · ' + f(c.kg, 0) + ' kg';
+        if (Array.isArray(c.cargo) && c.cargo.length)
+            document.getElementById('nowStatus').innerText += ' · ' + c.cargo.map(l => (l.u ? l.q : l.p) + ' × ' + l.n).join(', ');
     };
 
     // ---- weight stats per fill-up ----
