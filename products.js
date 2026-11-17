@@ -11,7 +11,7 @@
         ['Slab 500x500mm',26.90,0],['Slab 600x600mm',37.43,0],['Sleeper 900mm',14.50,0],['Tree Stump Paver 400mm',11.10,0],
         ['Air Vent',1.30,0],['Cobble Paver 100x100mm',1.5,0],['Sand Bags',40,0],['Stone 19mm Bag',40,0],
         ['Stone 13mm Bag',40,0],['Crusher Dust Bag',40,0],['Concrete 19mm Mix Bag',40,0],['Quick Mix Concrete Bag',40,0],
-        ['Quick Mix Mortar Bag',40,0],['110 Lintels',14.30,0],['150 Lintels',19.00,0],['Brick Imperial',3.60,500],
+        ['Quick Mix Mortar Bag',40,0],['Brick Imperial',3.60,500],
         ['Brick Maxi',3.80,400],['Brick ROK NFX Bredasdorp (500P)',3.0,500],['Block 90',10.10,130],['Block 140',14.60,100],['Block 190',16.20,75],
         ['Bond Paver',2.20,0],['Interlocker paver',3.30,0]
     ];
@@ -19,6 +19,22 @@
     try { prods = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) {}
     if (!Array.isArray(prods) || !prods.length) prods = D.map(a => ({ n: a[0], kg: a[1], pp: a[2] }));
     function saveProds() { try { localStorage.setItem(KEY, JSON.stringify(prods)); } catch (e) {} }
+
+    // ---- lintels: one product per length. kg per piece = kg per meter x length.
+    // Bundles of 20 up to 3.6 m, bundles of 10 from 3.9 m. Runs once, keeps your saved list.
+    try {
+        if (!localStorage.getItem('gbt10_lintels_v1')) {
+            const LEN = [0.9, 1.2, 1.5, 1.8, 2.1, 2.4, 2.7, 3.0, 3.3, 3.6, 3.9, 4.2, 4.5, 4.8, 5.4, 6.0];
+            const TYPES = [['110', 16.10], ['150', 21.10]];
+            prods = prods.filter(p => p.n !== '110 Lintels' && p.n !== '150 Lintels');
+            TYPES.forEach(t => LEN.forEach(l => {
+                const name = 'Lintel ' + t[0] + ' - ' + l.toFixed(1) + 'm';
+                if (!prods.some(p => p.n === name)) prods.push({ n: name, kg: Math.round(t[1] * l * 100) / 100, pp: l <= 3.6 ? 20 : 10 });
+            }));
+            saveProds();
+            localStorage.setItem('gbt10_lintels_v1', '1');
+        }
+    } catch (e) {}
     let sel = 0;
 
     let lines = [];
