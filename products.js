@@ -52,7 +52,7 @@
 
     const box = document.createElement('div');
     box.innerHTML =
-        '<label>Cargo on board now (weight) · v3</label>' +
+        '<label>Cargo on board now (weight) · v4</label>' +
         '<select id="cgProd"></select>' +
         '<div class="qrow"><input style="flex:1;min-width:0" type="number" inputmode="numeric" id="cgPal" placeholder="Pallets">' +
         '<input style="flex:1;min-width:0" type="number" inputmode="numeric" id="cgPP" placeholder="Pieces per pallet"></div>' +
@@ -146,6 +146,18 @@
         prods.push({ n: n.trim(), kg: kg, pp: pp > 0 ? pp : 0 });
         saveProds(); fillSel(prods.length - 1); pmRender();
         return true;
+    };
+
+    // ---- used by home.js: pallets in the cargo list (lintels count 0) and removing pallets when offloading ----
+    window.cgPallets = function () { return lines.reduce((t, l) => t + (l.p || 0), 0); };
+    window.cgTake = function (n) {
+        for (let i = lines.length - 1; i >= 0 && n > 0; i--) {
+            if (lines[i].u) continue;
+            const d = Math.min(lines[i].p, n);
+            lines[i].p -= d; n -= d;
+            if (lines[i].p <= 0) lines.splice(i, 1);
+        }
+        cgRender();
     };
 
     // ---- lets the main script accept a status change when only the cargo weight changed (e.g. lintels, 0 pallets) ----
