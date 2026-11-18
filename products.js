@@ -66,7 +66,7 @@
 
     const box = document.createElement('div');
     box.innerHTML =
-        '<label>Cargo on board now (weight) · v5</label>' +
+        '<label>Cargo on board now (weight) · v6</label>' +
         '<select id="cgProd"></select>' +
         '<div class="qrow"><input style="flex:1;min-width:0" type="number" inputmode="numeric" id="cgPal" placeholder="Pallets">' +
         '<input style="flex:1;min-width:0" type="number" inputmode="numeric" id="cgPP" placeholder="Pieces per pallet"></div>' +
@@ -79,6 +79,42 @@
     anchor.parentNode.insertBefore(box, anchor);
     const wBox = document.createElement('div');
     document.getElementById('estimates').after(wBox);
+
+    // ---- Offloading screen: pick which cargo line came off (home.js calls cgOffShow) ----
+    const offBox = document.createElement('div');
+    offBox.style.display = 'none';
+    box.after(offBox);
+    function palFromCargo() {
+        const k = window.cgPallets(), c = caps();
+        const t = Math.min(k, c.truck), r = selTrailer ? Math.min(k - t, c.trailer) : 0;
+        document.getElementById('truckP').value = t;
+        document.getElementById('trailerP').value = r;
+    }
+    function offRender() {
+        if (!lines.length) { offBox.innerHTML = '<div class="note">No cargo list for this load. Use the pallet buttons.</div>'; return; }
+        let h = '<label>What came off?</label>';
+        lines.forEach((l, i) => {
+            h += '<div class="est-row"><span>' + (l.u ? l.q : l.p) + ' × ' + esc(l.n) +
+                (l.u ? '' : ' <span class="mix">' + l.pp + ' per pallet</span>') + '</span><span>' +
+                (l.u ? '<button class="small-btn" style="margin:0 6px 0 0" onclick="cgOffSome(' + i + ')">Some</button>'
+                     : '<button class="small-btn" style="margin:0 6px 0 0" onclick="cgOff(' + i + ',1)">−1 pallet</button>') +
+                '<button class="small-btn" style="margin:0" onclick="cgOff(' + i + ',0)">All off</button></span></div>';
+        });
+        offBox.innerHTML = h;
+    }
+    window.cgOff = function (i, n) {
+        const l = lines[i]; if (!l) return;
+        if (!n || (!l.u && l.p <= n)) lines.splice(i, 1); else l.p -= n;
+        palFromCargo(); cgRender(); offRender();
+    };
+    window.cgOffSome = function (i) {
+        const l = lines[i]; if (!l) return;
+        const q = parseInt(prompt('How many lintels came off?'), 10);
+        if (!(q > 0)) return;
+        if (q >= l.q) lines.splice(i, 1); else l.q -= q;
+        palFromCargo(); cgRender(); offRender();
+    };
+    window.cgOffShow = function (on) { offBox.style.display = on ? 'block' : 'none'; if (on) offRender(); };
 
     function fillSel(i) {
         if (i !== undefined) sel = i;
