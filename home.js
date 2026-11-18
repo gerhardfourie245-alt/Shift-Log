@@ -125,6 +125,7 @@
       palSum.textContent = c.ps || "";
       allOff.style.display = c.all ? "block" : "none";
       if (cargoBox) cargoBox.style.display = c.cargo ? "block" : "none";
+      if (window.cgOffShow) cgOffShow(m === "off");
       $("evError").innerText = "";
     }
     window.scrollTo(0, 0);
