@@ -237,3 +237,10 @@
   showHint();
   renderStatus();
 })();
+
+// Offline: register the service worker (sw.js must sit next to index.html)
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", function () {
+    navigator.serviceWorker.register("sw.js").catch(function () {});
+  });
+}
