@@ -244,3 +244,104 @@ if ("serviceWorker" in navigator) {
     navigator.serviceWorker.register("sw.js").catch(function () {});
   });
 }
+
+// Backup: one file with everything on the phone (fill-ups, status log, products, settings).
+// Works offline. "Back up now" opens the share sheet (WhatsApp, email, Drive...) or downloads the file.
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const csvBtn = document.querySelector('button[onclick="copyCSV()"]');
+  if (!csvBtn) return;
+  const row = csvBtn.parentNode;
+
+  const wrap = document.createElement("div");
+  wrap.style.marginTop = "12px";
+  wrap.innerHTML =
+    '<button class="small-btn" id="bkNow">Back up now</button>' +
+    '<button class="small-btn" id="bkRestore">Restore backup</button>' +
+    '<input type="file" id="bkFile" accept=".json,application/json" style="display:none">' +
+    '<div class="note" id="bkNote"></div>';
+  row.after(wrap);
+
+  function stamp() {
+    let t = null;
+    try { t = localStorage.getItem("gbt10_lastbackup"); } catch (e) {}
+    $("bkNote").innerText = t
+      ? "Last backup: " + t.replace("T", " ").slice(0, 16)
+      : "No backup made yet. Tap Back up now and send the file to yourself.";
+  }
+  stamp();
+
+  function snapshot() {
+    const data = {};
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i);
+      if (k.indexOf("gbt10_") === 0 && k !== "gbt10_lastbackup")
+        data[k] = localStorage.getItem(k);
+    }
+    return { app: "shiftlog", v: 1, saved: new Date().toISOString(), data: data };
+  }
+
+  $("bkNow").onclick = function () {
+    const snap = snapshot();
+    const d = todayISO();
+    const name = "shiftlog-backup-" + d + ".json";
+    const file = new File([JSON.stringify(snap)], name, { type: "application/json" });
+    const done = function () {
+      try { localStorage.setItem("gbt10_lastbackup", new Date().toISOString()); } catch (e) {}
+      stamp();
+    };
+    if (navigator.canShare && navigator.canShare({ files: [file] })) {
+      navigator
+        .share({ files: [file], title: "Shift-Log backup " + d })
+        .then(done)
+        .catch(function () {}); // cancelled
+    } else {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(file);
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      done();
+      setInfo("Backup downloaded: " + name);
+    }
+  };
+
+  $("bkRestore").onclick = function () { $("bkFile").click(); };
+  $("bkFile").onchange = function () {
+    const fl = this.files && this.files[0];
+    if (!fl) return;
+    const rd = new FileReader();
+    rd.onload = function () {
+      let snap;
+      try { snap = JSON.parse(rd.result); } catch (e) { snap = null; }
+      if (!snap || snap.app !== "shiftlog" || !snap.data) {
+        alert("That is not a Shift-Log backup file.");
+        return;
+      }
+      let nl = 0, ne = 0;
+      try { nl = JSON.parse(snap.data.gbt10_logs || "[]").length; } catch (e) {}
+      try { ne = JSON.parse(snap.data.gbt10_status || "[]").length; } catch (e) {}
+      if (
+        !confirm(
+          "Replace EVERYTHING on this phone with the backup from " +
+            String(snap.saved || "").slice(0, 10) +
+            " (" + nl + " fill-ups, " + ne + " status entries)?"
+        )
+      )
+        return;
+      const old = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const k = localStorage.key(i);
+        if (k.indexOf("gbt10_") === 0) old.push(k);
+      }
+      old.forEach(function (k) { localStorage.removeItem(k); });
+      Object.keys(snap.data).forEach(function (k) {
+        if (k.indexOf("gbt10_") === 0) localStorage.setItem(k, snap.data[k]);
+      });
+      location.reload();
+    };
+    rd.readAsText(fl);
+    this.value = "";
+  };
+})();
