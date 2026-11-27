@@ -66,7 +66,7 @@
 
     const box = document.createElement('div');
     box.innerHTML =
-        '<label>Cargo on board now (weight) · v7</label>' +
+        '<label>Cargo on board now (weight) · v8</label>' +
         '<select id="cgProd"></select>' +
         '<div class="qrow"><input style="flex:1;min-width:0" type="number" inputmode="numeric" id="cgPal" placeholder="Pallets">' +
         '<input style="flex:1;min-width:0" type="number" inputmode="numeric" id="cgPP" placeholder="Pieces per pallet"></div>' +
@@ -250,6 +250,13 @@
         }
     };
 
+    // part pallets: show the piece count when it differs from the product's usual pieces per pallet
+    function cargoTxt(l) {
+        if (l.u) return l.q + ' × ' + l.n;
+        const sp = prods.find(x => x.n === l.n);
+        const part = sp && sp.pp > 0 && l.pp !== sp.pp;
+        return l.p + ' × ' + l.n + (part ? ' (' + l.pp + (l.p === 1 ? ' pcs)' : ' pcs each)') : '');
+    }
     const origStatus = window.renderStatus;
     window.renderStatus = function () {
         origStatus();
@@ -257,7 +264,7 @@
         const c = events[events.length - 1];
         if (c.kg !== undefined) document.getElementById('nowStatus').innerText += ' · ' + f(c.kg, 0) + ' kg';
         if (Array.isArray(c.cargo) && c.cargo.length)
-            document.getElementById('nowStatus').innerText += ' · ' + c.cargo.map(l => (l.u ? l.q : l.p) + ' × ' + l.n).join(', ');
+            document.getElementById('nowStatus').innerText += ' · ' + c.cargo.map(cargoTxt).join(', ');
     };
 
     // ---- weight stats per fill-up ----
