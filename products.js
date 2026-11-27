@@ -66,7 +66,7 @@
 
     const box = document.createElement('div');
     box.innerHTML =
-        '<label>Cargo on board now (weight) · v6</label>' +
+        '<label>Cargo on board now (weight) · v7</label>' +
         '<select id="cgProd"></select>' +
         '<div class="qrow"><input style="flex:1;min-width:0" type="number" inputmode="numeric" id="cgPal" placeholder="Pallets">' +
         '<input style="flex:1;min-width:0" type="number" inputmode="numeric" id="cgPP" placeholder="Pieces per pallet"></div>' +
@@ -97,7 +97,8 @@
             h += '<div class="est-row"><span>' + (l.u ? l.q : l.p) + ' × ' + esc(l.n) +
                 (l.u ? '' : ' <span class="mix">' + l.pp + ' per pallet</span>') + '</span><span>' +
                 (l.u ? '<button class="small-btn" style="margin:0 6px 0 0" onclick="cgOffSome(' + i + ')">Some</button>'
-                     : '<button class="small-btn" style="margin:0 6px 0 0" onclick="cgOff(' + i + ',1)">−1 pallet</button>') +
+                     : '<button class="small-btn" style="margin:0 6px 0 0" onclick="cgOff(' + i + ',1)">−1 pallet</button>' +
+                       '<button class="small-btn" style="margin:0 6px 0 0" onclick="cgOffSome(' + i + ')">Some pieces</button>') +
                 '<button class="small-btn" style="margin:0" onclick="cgOff(' + i + ',0)">All off</button></span></div>';
         });
         offBox.innerHTML = h;
@@ -107,11 +108,27 @@
         if (!n || (!l.u && l.p <= n)) lines.splice(i, 1); else l.p -= n;
         palFromCargo(); cgRender(); offRender();
     };
+    // Some: lintels = how many lintels came off. Pallet lines = how many pieces came off;
+    // what is left is kept as full pallets plus one part pallet (weight stays correct).
     window.cgOffSome = function (i) {
         const l = lines[i]; if (!l) return;
-        const q = parseInt(prompt('How many lintels came off?'), 10);
-        if (!(q > 0)) return;
-        if (q >= l.q) lines.splice(i, 1); else l.q -= q;
+        if (l.u) {
+            const q = parseInt(prompt('How many lintels came off?'), 10);
+            if (!(q > 0)) return;
+            if (q >= l.q) lines.splice(i, 1); else l.q -= q;
+        } else {
+            const have = l.p * l.pp;
+            const q = parseInt(prompt('How many pieces came off? (' + have + ' on board, ' + l.pp + ' per pallet)'), 10);
+            if (!(q > 0)) return;
+            if (q >= have) lines.splice(i, 1);
+            else {
+                const rem = have - q, full = Math.floor(rem / l.pp), part = rem % l.pp;
+                const out = [];
+                if (full > 0) out.push(Object.assign({}, l, { p: full }));
+                if (part > 0) out.push(Object.assign({}, l, { p: 1, pp: part }));
+                lines.splice(i, 1, ...out);
+            }
+        }
         palFromCargo(); cgRender(); offRender();
     };
     window.cgOffShow = function (on) { offBox.style.display = on ? 'block' : 'none'; if (on) offRender(); };
